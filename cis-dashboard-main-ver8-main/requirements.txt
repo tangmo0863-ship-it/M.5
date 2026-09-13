@@ -1,6 +1,0 @@
-streamlit
-pandas
-plotly
-SQLAlchemy
-numpy
-scikit-learn
