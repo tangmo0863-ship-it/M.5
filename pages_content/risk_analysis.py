@@ -34,6 +34,24 @@ from common import fmt_mb, fmt_ratio, safe, show_chart, render_nav_footer, COMPA
 
 
 def render(ctx):
+    # --- ปุ่มคำนวณคะแนนใหม่เฉพาะ Module 5 (ชั่วคราว ใช้ตอน deploy สูตรใหม่) ---
+    # ไม่ต้องแก้ common.py — เรียก calculate_scores.run_full_pipeline() ตรงๆ เพื่อบังคับให้
+    # ฐานข้อมูล cis_database.db คำนวณใหม่ด้วยสูตรล่าสุดของ calculate_modules/risk_analysis.py
+    # หมายเหตุ: Streamlit Cloud อาจรีเซ็ตไฟล์ที่ไม่ได้ commit เมื่อแอป restart/sleep
+    # ถ้ากดแล้วข้อมูลหายอีกหลัง reboot ให้กดปุ่มนี้ซ้ำได้ (กดครั้งเดียวพอในแต่ละรอบ deploy)
+    with st.expander("⚙️ Admin (Module 5): คำนวณคะแนนใหม่ทั้งระบบ"):
+        st.caption("กดปุ่มนี้ครั้งเดียวหลัง deploy สูตรใหม่ของ calculate_modules/risk_analysis.py "
+                    "เพื่อให้ cvar_95 / avg_daily_value_mb / worst_dd_20d มีค่าจริง")
+        if st.button("🔄 คำนวณคะแนนใหม่จากสูตรล่าสุด", key="risk_admin_recalc_btn"):
+            with st.spinner("กำลังคำนวณคะแนนใหม่ทั้งหมด (10-30 วินาที)..."):
+                import importlib
+                import calculate_scores
+                importlib.reload(calculate_scores)
+                calculate_scores.run_full_pipeline()
+                st.cache_data.clear()
+            st.success("คำนวณเสร็จแล้ว! กำลังโหลดข้อมูลใหม่...")
+            st.rerun()
+
     risk_score = int(round(safe(ctx.stock_info.get('risk_score'), 45)))
     risk_status = "LOW RISK" if risk_score >= 65 else ("MODERATE RISK" if risk_score >= 40 else "HIGH RISK")
     risk_color = "#10B981" if risk_score >= 65 else ("#F59E0B" if risk_score >= 40 else "#EF4444")
