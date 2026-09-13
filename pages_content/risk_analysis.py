@@ -54,7 +54,10 @@ def render(ctx):
     r1_c1, r1_c2 = st.columns([1.15, 2.85])
 
     with r1_c1:
-        needle_frac = min(1.0, risk_score / 100)
+        # risk_score นิยามว่า "ยิ่งสูงยิ่งปลอดภัย" แต่ส่วนโค้งพื้นหลังวาดแบบ
+        # ซ้าย=เขียว(ปลอดภัย) -> ขวา=แดง(เสี่ยง) ตามธรรมเนียมมาตรวัดทั่วไป
+        # ต้อง "กลับด้าน" มุมเข็มก่อน ไม่งั้นคะแนนสูง(ปลอดภัย)จะเหวี่ยงเข็มไปทางแดงผิดความหมาย
+        needle_frac = 1 - min(1.0, risk_score / 100)
         st.markdown(f"""<div style="background-color:#0F172A; border:1px solid #1E293B; border-radius:12px; padding:16px; min-height:260px; display:flex; flex-direction:column; justify-content:space-between; text-align:center;">
     <div style="font-size:14.5px; font-weight:bold; color:#94A3B8; letter-spacing:0.5px; text-align:left;">RISK SUMMARY</div>
     <div style="margin:auto 0;"><svg viewBox="0 0 100 55" style="width:140px; height:90px; display:block; margin:0 auto;">
