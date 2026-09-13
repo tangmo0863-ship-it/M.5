@@ -14,6 +14,13 @@ pages_content/risk_analysis.py
     ctx.current_price, ctx.change_pct, ctx.change_val, ctx.change_color, ctx.change_sign, ctx.arrow_sign
 
 ห้ามแก้ CSS ส่วนกลางหรือ helper function ใน common.py จากไฟล์นี้ — ถ้าจำเป็นต้องแก้ ให้แจ้ง Layout Lead ก่อน
+
+=== เปลี่ยนแปลงจากเวอร์ชันก่อนหน้า ===
+1. เพิ่มคอลัมน์ "TRADING LIQUIDITY" ในแถวกราฟหลัก (ต้องคำนวณคะแนนใหม่ก่อนถึงจะเทียบกับหุ้นอื่นได้)
+2. การ์ด "DOWNSIDE RISK" โชว์ VaR คู่กับ CVaR แทนที่จะโชว์ VaR อย่างเดียว
+3. แก้คำอธิบาย Sharpe/Sortino ให้ตรงกับความจริงว่าหัก Risk-free Rate แล้ว
+4. ตาราง Stress Test ตัด "Volatility Shock" กับ "Recession Scenario" (สูตรประดิษฐ์เอง ไม่มีที่มา)
+   ออก แทนที่ด้วย "Worst 20-Day Move" ที่เกิดขึ้นจริงในข้อมูลราคา
 """
 import streamlit as st
 import pandas as pd
@@ -84,17 +91,18 @@ def render(ctx):
             risk_dim_card("Market Risk (Beta)", market_risk),
             risk_dim_card("Price Risk (Vol.)", price_risk),
             risk_dim_card("Financial Risk (D/E)", financial_risk),
-            risk_dim_card("Liquidity Risk", liquidity_risk),
+            risk_dim_card("Acct. Liquidity (CR)", liquidity_risk),
             risk_dim_card("Downside Risk (DD)", downside_risk),
             risk_dim_card("Overall Risk", overall_risk_dim),
         ])
         st.markdown(f"""<div style="background-color:#0F172A; border:1px solid #1E293B; border-radius:12px; padding:16px; min-height:260px; display:flex; flex-direction:column; justify-content:space-between;">
     <div style="font-size:14.5px; font-weight:bold; color:#94A3B8; letter-spacing:0.5px;">RISK DIMENSION OVERVIEW ({ctx.selected_ticker})</div>
     <div style="display:grid; grid-template-columns: repeat(6, 1fr); gap:8px; margin:auto 0;">{dims_html}</div>
+    <div style="font-size:11.5px; color:#64748B;">*"Acct. Liquidity" คือสภาพคล่องทางบัญชี (Current Ratio) — คนละเรื่องกับ "Trading Liquidity" (สภาพคล่องซื้อขายหุ้น) ที่แสดงด้านล่าง</div>
     </div>""", unsafe_allow_html=True)
 
     st.markdown("<div style='margin-top:22px;'></div>", unsafe_allow_html=True)
-    r2_c1, r2_c2, r2_c3 = st.columns(3)
+    r2_c1, r2_c2, r2_c3, r2_c4 = st.columns(4)
 
     rh = ctx.risk_hist_df[ctx.risk_hist_df['ticker'] == ctx.selected_ticker].sort_values('date') if not ctx.risk_hist_df.empty else pd.DataFrame()
 
@@ -145,14 +153,39 @@ def render(ctx):
         else:
             st.info("ไม่มีข้อมูล")
 
+    with r2_c4:
+        # Trading Liquidity — มูลค่าซื้อขายเฉลี่ยต่อวัน (ล้านบาท) เทียบกับ 8 หุ้นที่ติดตาม
+        # (ต่างจาก Current Ratio ที่เป็นสภาพคล่องทางบัญชี — นี่คือสภาพคล่องในการซื้อ/ขายหุ้นจริง)
+        own_liq = safe(ctx.stock_info.get('avg_daily_value_mb'), 0.0)
+        st.markdown(f"""<div style="background-color:#0F172A; border:1px solid #1E293B; border-radius:12px 12px 0 0; padding:12px 14px 0 14px;">
+    <div style="font-size:14px; font-weight:bold; color:#94A3B8; letter-spacing:0.5px;">TRADING LIQUIDITY — Avg Value/Day (60D, actual)</div>
+    <div style="font-size:19px; font-weight:bold; color:#FFFFFF; margin-top:2px;">{fmt_mb(own_liq*1e6)}</div></div>""", unsafe_allow_html=True)
+        if 'avg_daily_value_mb' in ctx.scores_df.columns and ctx.scores_df['avg_daily_value_mb'].notna().any():
+            liq_cmp = ctx.scores_df[['ticker', 'avg_daily_value_mb']].dropna().sort_values('avg_daily_value_mb')
+            colors_liq = ['#A855F7' if t == ctx.selected_ticker else '#2DD4BF' for t in liq_cmp['ticker']]
+            fig_liq = go.Figure(go.Bar(x=liq_cmp['avg_daily_value_mb'], y=liq_cmp['ticker'], orientation='h', marker=dict(color=colors_liq)))
+            fig_liq.update_layout(
+                height=160, margin=dict(l=40, r=10, t=10, b=20), paper_bgcolor="#0F172A", plot_bgcolor="#0F172A",
+                xaxis=dict(tickfont=dict(size=11, color="#64748B"), gridcolor="#1E293B", title=dict(text="THB mn/day", font=dict(size=10, color="#64748B"))),
+                yaxis=dict(tickfont=dict(size=11, color="#CBD5E1"), gridcolor="#1E293B"), showlegend=False
+            )
+            show_chart(fig_liq, key="risk_liquidity", expand_height=550)
+        else:
+            st.info("กด '🔄 คำนวณคะแนนใหม่' เพื่อเปรียบเทียบสภาพคล่องกับหุ้นอื่น")
+
     st.markdown("<div style='margin-top:22px;'></div>", unsafe_allow_html=True)
     r3_c1, r3_c2, r3_c3 = st.columns([1.25, 1.25, 1.5])
 
     with r3_c1:
+        var95 = safe(ctx.stock_info.get('var_95'))
+        cvar95 = safe(ctx.stock_info.get('cvar_95'), var95)
         st.markdown(f"""<div style="background-color:#0F172A; border:1px solid #1E293B; border-radius:12px; padding:14px; min-height:225px; display:flex; flex-direction:column; justify-content:space-between;">
-    <div style="font-size:14px; font-weight:bold; color:#94A3B8; letter-spacing:0.5px;">DOWNSIDE RISK (VAR 95%, daily)</div>
-    <div style="font-size:24px; font-weight:bold; color:#EF4444; margin:auto 0;">-{safe(ctx.stock_info.get('var_95')):.2f}%<div style="font-size:12.5px; color:#64748B; font-weight:normal;">Expected 1-Day Maximum Loss</div></div>
-    <div style="font-size:12px; color:#64748B; border-top:1px solid #1E293B; padding-top:6px;">คำนวณจาก Historical Simulation (2023-2025)</div>
+    <div style="font-size:14px; font-weight:bold; color:#94A3B8; letter-spacing:0.5px;">DOWNSIDE RISK (Daily)</div>
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin:auto 0; text-align:center;">
+    <div><div style="font-size:22px; font-weight:bold; color:#EF4444;">-{var95:.2f}%</div><div style="font-size:12px; color:#64748B;">VaR 95%</div></div>
+    <div><div style="font-size:22px; font-weight:bold; color:#F87171;">-{cvar95:.2f}%</div><div style="font-size:12px; color:#64748B;">CVaR 95%</div></div>
+    </div>
+    <div style="font-size:11.5px; color:#64748B; border-top:1px solid #1E293B; padding-top:6px; line-height:1.4;">VaR = ขาดทุนสูงสุดที่คาดใน 95% ของวัน (Parametric) &nbsp;|&nbsp; CVaR = ขาดทุนเฉลี่ยจริงในวันที่แย่กว่านั้น (Historical, จับ tail risk ได้ดีกว่า)</div>
     </div>""", unsafe_allow_html=True)
 
     with r3_c2:
@@ -164,21 +197,21 @@ def render(ctx):
     <div style="background:#151E2F; border:1px solid #1E293B; border-radius:6px; padding:6px 2px;"><div style="font-size:12px; color:#64748B;">Sharpe</div><div style="font-size:16.5px; font-weight:bold; color:#F8FAFC;">{safe(ctx.stock_info.get('sharpe_ratio')):.2f}</div></div>
     <div style="background:#151E2F; border:1px solid #1E293B; border-radius:6px; padding:6px 2px;"><div style="font-size:12px; color:#64748B;">Sortino</div><div style="font-size:16.5px; font-weight:bold; color:#F8FAFC;">{safe(ctx.stock_info.get('sortino_ratio')):.2f}</div></div>
     <div style="background:#151E2F; border:1px solid #1E293B; border-radius:6px; padding:6px 2px;"><div style="font-size:12px; color:#64748B;">Calmar</div><div style="font-size:16.5px; font-weight:bold; color:#F8FAFC;">{calmar:.2f}</div></div>
-    </div><div style="font-size:12px; color:#CBD5E1; border-top:1px solid #1E293B; padding-top:6px;">Sharpe/Sortino &gt; 0.5 สะท้อนผลตอบแทนคุ้มค่าความเสี่ยง</div>
+    </div><div style="font-size:12px; color:#CBD5E1; border-top:1px solid #1E293B; padding-top:6px;">คำนวณหัก Risk-free Rate (~2.0%/ปี, BOT Policy Rate เฉลี่ย 2023-2025) แล้ว &nbsp;|&nbsp; Sharpe/Sortino &gt; 0.5 สะท้อนผลตอบแทนคุ้มค่าความเสี่ยง</div>
     </div>""", unsafe_allow_html=True)
 
     with r3_c3:
         crash_impact = round(beta_val * -20, 1)
-        rate_impact = round(-vol_val * 0.35, 1)
-        recession_impact = round(beta_val * -15 - dd_val * 0.1, 1)
+        worst_dd = ctx.stock_info.get('worst_dd_20d')
+        worst_dd_date = ctx.stock_info.get('worst_dd_20d_end_date') or '-'
+        worst_dd_txt = f"{worst_dd:+.1f}%" if worst_dd is not None else "N/A"
         st.markdown(f"""<div style="background-color:#0F172A; border:1px solid #1E293B; border-radius:12px; padding:14px; min-height:225px; display:flex; flex-direction:column; justify-content:space-between;">
-    <div style="font-size:14px; font-weight:bold; color:#94A3B8; letter-spacing:0.5px;">STRESS TEST SCENARIO (Beta-implied)</div>
+    <div style="font-size:14px; font-weight:bold; color:#94A3B8; letter-spacing:0.5px;">STRESS TEST</div>
     <table style="width:100%; font-size:13px; color:#CBD5E1; border-collapse:collapse; margin:auto 0;">
-    <tr style="border-bottom:1px solid #1E293B; color:#64748B; font-size:12.5px;"><th style="text-align:left; padding:3px 0;">Scenario</th><th style="text-align:right;">Est. Impact</th></tr>
-    <tr style="border-bottom:1px solid #1E293B;"><td style="padding:3px 0;">Market Crash (SET -20%)</td><td style="text-align:right; color:#EF4444; font-weight:bold;">{crash_impact:+.1f}%</td></tr>
-    <tr style="border-bottom:1px solid #1E293B;"><td style="padding:3px 0;">Volatility Shock</td><td style="text-align:right; color:#EF4444; font-weight:bold;">{rate_impact:+.1f}%</td></tr>
-    <tr><td style="padding:3px 0;">Recession Scenario</td><td style="text-align:right; color:#EF4444; font-weight:bold;">{recession_impact:+.1f}%</td></tr>
-    </table><div style="font-size:12px; color:#64748B; border-top:1px solid #1E293B; padding-top:6px;">ประมาณจาก Beta = {beta_val:.2f} คูณ shock ของตลาด</div>
+    <tr style="border-bottom:1px solid #1E293B; color:#64748B; font-size:12.5px;"><th style="text-align:left; padding:3px 0;">Scenario</th><th style="text-align:right;">Impact</th></tr>
+    <tr style="border-bottom:1px solid #1E293B;"><td style="padding:3px 0;">Market Crash (SET -20%, Beta-implied)</td><td style="text-align:right; color:#EF4444; font-weight:bold;">{crash_impact:+.1f}%</td></tr>
+    <tr><td style="padding:3px 0;">Worst 20-Day Move (เกิดจริง, สิ้นสุด {worst_dd_date})</td><td style="text-align:right; color:#EF4444; font-weight:bold;">{worst_dd_txt}</td></tr>
+    </table><div style="font-size:11.5px; color:#64748B; border-top:1px solid #1E293B; padding-top:6px; line-height:1.4;">แถวบน: ประมาณจาก Beta={beta_val:.2f} (ทฤษฎี CAPM) &nbsp;|&nbsp; แถวล่าง: เหตุการณ์ร่วง 20 วันทำการที่แย่ที่สุดที่เคยเกิดจริงในข้อมูล 2023-2025 ไม่ใช่การพยากรณ์</div>
     </div>""", unsafe_allow_html=True)
 
     st.markdown("<div style='margin-top:22px;'></div>", unsafe_allow_html=True)
@@ -192,6 +225,12 @@ def render(ctx):
         else: risk_pts.append(("●", "#EF4444", f"ภาระหนี้สินค่อนข้างสูง D/E = {de_val_r:.2f} เท่า"))
         if dd_val < 30: risk_pts.append(("✔", "#10B981", f"Max Drawdown {dd_val:.1f}% อยู่ในเกณฑ์ควบคุมได้"))
         else: risk_pts.append(("●", "#EF4444", f"Max Drawdown {dd_val:.1f}% ค่อนข้างลึก ควรระวังช่วงตลาดผันผวน"))
+        liq_val = ctx.stock_info.get('avg_daily_value_mb')
+        if liq_val is not None:
+            if liq_val >= 20:
+                risk_pts.append(("✔", "#10B981", f"สภาพคล่องซื้อขายสูง เฉลี่ย {liq_val:,.1f} ล้านบาท/วัน เข้า-ออกได้คล่อง"))
+            else:
+                risk_pts.append(("●", "#EF4444", f"สภาพคล่องซื้อขายค่อนข้างต่ำ เฉลี่ย {liq_val:,.1f} ล้านบาท/วัน อาจกระทบราคาเวลาซื้อ/ขายก้อนใหญ่"))
         risk_pts_html = "".join([f'<div style="display:flex; gap:6px; margin-bottom:3px;"><span style="color:{c};">{icon}</span><span>{txt}</span></div>' for icon, c, txt in risk_pts])
         st.markdown(f"""<div style="background-color:#0F172A; border:1px solid #1E293B; border-radius:12px; padding:14px; min-height:210px; display:flex; flex-direction:column; justify-content:space-between;">
     <div style="font-size:14px; font-weight:bold; color:#94A3B8; letter-spacing:0.5px;">RISK FACTORS HIGHLIGHT ({ctx.selected_ticker})</div>
@@ -202,11 +241,10 @@ def render(ctx):
         st.markdown(f"""<div style="background-color:#0F172A; border:1px solid #1E293B; border-radius:12px; padding:14px; min-height:210px; display:flex; flex-direction:column; justify-content:space-between;">
     <div><div style="font-size:14px; font-weight:bold; color:#94A3B8; letter-spacing:0.5px; margin-bottom:6px;">EXPLAINABLE RISK SUMMARY</div>
     <p style="font-size:13px; color:#CBD5E1; line-height:1.5; margin:0;">
-    หุ้น <b>{ctx.selected_ticker}</b> มีคะแนนความเสี่ยงรวมอยู่ที่ <b>{risk_score}/100 ({risk_status})</b> โดย Beta = {beta_val:.2f}, Volatility รายปี = {vol_val:.1f}%, และ Max Drawdown สูงสุด = {dd_val:.1f}% ในช่วง 2023-2025
+    หุ้น <b>{ctx.selected_ticker}</b> มีคะแนนความเสี่ยงรวมอยู่ที่ <b>{risk_score}/100 ({risk_status})</b> โดย Beta = {beta_val:.2f}, Volatility รายปี = {vol_val:.1f}%, Max Drawdown สูงสุด = {dd_val:.1f}% และ CVaR 95% = -{safe(ctx.stock_info.get('cvar_95')):.2f}% ต่อวัน ในช่วง 2023-2025
     </p></div>
     <div style="font-size:12px; color:#F59E0B; background:rgba(245,158,11,0.08); border-left:3px solid #F59E0B; padding:5px 8px; border-radius:4px;">
     <b>ข้อสังเกต:</b> ควรติดตามความผันผวนของตลาดโลกและนโยบายอัตราดอกเบี้ยอย่างต่อเนื่อง</div>
     </div>""", unsafe_allow_html=True)
 
     render_nav_footer("m5", prev_page=" 🔮 AI Prediction", next_page=" 📊 Industry Benchmark")
-
