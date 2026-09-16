@@ -228,11 +228,7 @@ def render(ctx):
         if dd_val < 30: risk_pts.append(("✔", "#10B981", f"Max Drawdown {dd_val:.1f}% อยู่ในเกณฑ์ควบคุมได้"))
         else: risk_pts.append(("●", "#EF4444", f"Max Drawdown {dd_val:.1f}% ค่อนข้างลึก ควรระวังช่วงตลาดผันผวน"))
         liq_val = ctx.stock_info.get('avg_daily_value_mb')
-        if liq_val is not None:
-            if liq_val >= 20:
-                risk_pts.append(("✔", "#10B981", f"สภาพคล่องซื้อขายสูง เฉลี่ย {liq_val:,.1f} ล้านบาท/วัน เข้า-ออกได้คล่อง"))
-            else:
-                risk_pts.append(("●", "#EF4444", f"สภาพคล่องซื้อขายค่อนข้างต่ำ เฉลี่ย {liq_val:,.1f} ล้านบาท/วัน อาจกระทบราคาเวลาซื้อ/ขายก้อนใหญ่"))
+        
         risk_pts_html = "".join([f'<div style="display:flex; gap:6px; margin-bottom:3px;"><span style="color:{c};">{icon}</span><span>{txt}</span></div>' for icon, c, txt in risk_pts])
         st.markdown(f"""<div style="background-color:#0F172A; border:1px solid #1E293B; border-radius:12px; padding:14px; min-height:210px; display:flex; flex-direction:column; justify-content:space-between;">
     <div style="font-size:14px; font-weight:bold; color:#94A3B8; letter-spacing:0.5px;">RISK FACTORS HIGHLIGHT ({ctx.selected_ticker})</div>
