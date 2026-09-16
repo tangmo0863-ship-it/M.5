@@ -123,7 +123,7 @@ def render(ctx):
     </div>""", unsafe_allow_html=True)
 
     st.markdown("<div style='margin-top:22px;'></div>", unsafe_allow_html=True)
-    r2_c1, r2_c2, r2_c3, r2_c4 = st.columns(4)
+    r2_c1, r2_c2, r2_c3 = st.columns(3)
 
     rh = ctx.risk_hist_df[ctx.risk_hist_df['ticker'] == ctx.selected_ticker].sort_values('date') if not ctx.risk_hist_df.empty else pd.DataFrame()
 
@@ -174,23 +174,6 @@ def render(ctx):
         else:
             st.info("ไม่มีข้อมูล")
 
-    with r2_c4:
-        own_liq = safe(ctx.stock_info.get('avg_daily_value_mb'), 0.0)
-        st.markdown(f"""<div style="background-color:#0F172A; border:1px solid #1E293B; border-radius:12px 12px 0 0; padding:12px 14px 0 14px;">
-    <div style="font-size:14px; font-weight:bold; color:#94A3B8; letter-spacing:0.5px;">TRADING LIQUIDITY — Avg Value/Day (60D, actual)</div>
-    <div style="font-size:19px; font-weight:bold; color:#FFFFFF; margin-top:2px;">{fmt_mb(own_liq*1e6)}</div></div>""", unsafe_allow_html=True)
-        if 'avg_daily_value_mb' in ctx.scores_df.columns and ctx.scores_df['avg_daily_value_mb'].notna().any():
-            liq_cmp = ctx.scores_df[['ticker', 'avg_daily_value_mb']].dropna().sort_values('avg_daily_value_mb')
-            colors_liq = ['#A855F7' if t == ctx.selected_ticker else '#2DD4BF' for t in liq_cmp['ticker']]
-            fig_liq = go.Figure(go.Bar(x=liq_cmp['avg_daily_value_mb'], y=liq_cmp['ticker'], orientation='h', marker=dict(color=colors_liq)))
-            fig_liq.update_layout(
-                height=160, margin=dict(l=40, r=10, t=10, b=20), paper_bgcolor="#0F172A", plot_bgcolor="#0F172A",
-                xaxis=dict(tickfont=dict(size=11, color="#64748B"), gridcolor="#1E293B", title=dict(text="THB mn/day", font=dict(size=10, color="#64748B"))),
-                yaxis=dict(tickfont=dict(size=11, color="#CBD5E1"), gridcolor="#1E293B"), showlegend=False
-            )
-            show_chart(fig_liq, key="risk_liquidity", expand_height=550)
-        else:
-            st.info("กด '🔄 คำนวณคะแนนใหม่' เพื่อเปรียบเทียบสภาพคล่องกับหุ้นอื่น")
 
     st.markdown("<div style='margin-top:22px;'></div>", unsafe_allow_html=True)
     r3_c1, r3_c2, r3_c3 = st.columns([1.25, 1.25, 1.5])
