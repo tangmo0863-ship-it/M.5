@@ -140,16 +140,11 @@ def calculate_risk_module(df_price_ticker, risk_static_row):
     drawdown = (df['close'] - cum_max) / cum_max
     max_dd_calc = abs(drawdown.min()) * 100
 
-    # จัดการกรณีความผิดปกติของข้อมูลไฟล์ความเสี่ยง (F-3, F-4)
-    # หากค่า Max Drawdown จากไฟล์ซ้ำกันหรือผิดปกติ ให้ fallback สู่ราคาจริง
     if risk_static_row is not None and not risk_static_row.empty:
         beta = clean_float(risk_static_row.iloc[0].get('beta'), default=1.0)
-        file_vol = clean_float(risk_static_row.iloc[0].get('volatility_pct'), default=annual_vol_calc)
-        file_dd = abs(clean_float(risk_static_row.iloc[0].get('max_drawdown_pct'), default=max_dd_calc))
-        
-        # ตรวจสอบว่าค่าจากไฟล์สมเหตุสมผลหรือไม่ (เช่น ตรวจสอบความซ้ำซ้อนผิดปกติ)
-        annual_vol = annual_vol_calc if pd.isna(file_vol) else file_vol
-        max_dd = max_dd_calc if pd.isna(file_dd) or abs(file_dd - 29.36) < 1e-4 else file_dd
+        annual_vol = clean_float(risk_static_row.iloc[0].get('volatility_pct'), default=annual_vol_calc)
+        # แก้ F-3: ใช้ค่า Max Drawdown ที่คำนวณจากราคาจริงแทนค่าในไฟล์ที่ค้าง -29.36% ทุกหุ้น
+        max_dd = max_dd_calc
     else:
         beta = 1.0
         annual_vol = annual_vol_calc
