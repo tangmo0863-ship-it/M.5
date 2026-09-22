@@ -117,9 +117,8 @@ def calculate_risk_module(df_price_ticker, risk_static_row):
     """คำนวณตัวชี้วัดความเสี่ยง 5 มิติของหุ้น 1 ตัว"""
     df = df_price_ticker.sort_values(by='date').reset_index(drop=True)
     df = _clean_price_series(df, 'close')
-    
+
     if len(df) < 2:
-        # กรณีข้อมูลน้อยเกินไป คืนค่า None ตาม Data Contract (F-7)
         return {
             'risk_score': None, 'volatility': None, 'volatility_calc': None,
             'max_drawdown': None, 'var_95': None, 'beta': 1.0,
@@ -140,22 +139,24 @@ def calculate_risk_module(df_price_ticker, risk_static_row):
     drawdown = (df['close'] - cum_max) / cum_max
     max_dd_calc = abs(drawdown.min()) * 100
 
-if risk_static_row is not None and not risk_static_row.empty:
+    if risk_static_row is not None and not risk_static_row.empty:
         beta = clean_float(risk_static_row.iloc[0].get('beta'), default=1.0)
         annual_vol = clean_float(risk_static_row.iloc[0].get('volatility_pct'), default=annual_vol_calc)
+        # แก้ F-3: ใช้ค่า Drawdown จริงจากราคา แทนค่า -29.36% ที่ซ้ำกันในไฟล์
         max_dd = max_dd_calc
     else:
         beta = 1.0
         annual_vol = annual_vol_calc
         max_dd = max_dd_calc
-    # VaR และ CVaR (Historical Simulation ทั้งคู่ เพื่อให้สอดคล้องกัน - F-6)
+
+    # VaR และ CVaR
     var_95 = _compute_var_historical(df['returns'], confidence=0.95)
     cvar_95 = _compute_cvar(df['returns'], confidence=0.95)
 
     # Sharpe และ Sortino Ratio
     rf_daily = RISK_FREE_RATE_ANNUAL / 252
     excess_returns = df['returns'] - rf_daily
-    
+
     if pd.isna(daily_vol) or len(df['returns'].dropna()) < 2:
         sharpe = None
     elif daily_vol > 0:
@@ -163,7 +164,7 @@ if risk_static_row is not None and not risk_static_row.empty:
     else:
         sharpe = 0.0
 
-    # Downside Deviation ตามสูตรสากล (F-8ก)
+    # Downside Deviation (F-8ก)
     downside_diff = np.minimum(0, df['returns'] - rf_daily).dropna()
     if len(downside_diff) > 1:
         downside_deviation = np.sqrt(np.mean(downside_diff ** 2))
@@ -180,7 +181,7 @@ if risk_static_row is not None and not risk_static_row.empty:
     psr = _compute_psr(df['returns'], sr_benchmark=0.0)
     recovery_days = _compute_recovery_days(df)
 
-    # รวมคะแนนความเสี่ยง 5 มิติ
+    # รวมคะแนน 5 มิติ
     tail_input = cvar_95 if cvar_95 is not None else (var_95 if pd.notna(var_95) else None)
     tail_dim = float(np.clip(tail_input * 10, 5, 95)) if tail_input is not None else None
     drawdown_dim = (float(np.clip(max_dd * 1.5 + _recovery_penalty(recovery_days), 5, 95))
@@ -232,7 +233,7 @@ def build_risk_rolling_history(df_price_ticker):
     df = _clean_price_series(df, 'close')
     if len(df) < 30:
         return pd.DataFrame(columns=['date', 'rolling_vol_30d', 'drawdown_pct'])
-        
+
     df['returns'] = df['close'].pct_change()
     df['rolling_vol_30d'] = df['returns'].rolling(30).std() * np.sqrt(252) * 100
     cum_max = df['close'].cummax()
