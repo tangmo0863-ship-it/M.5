@@ -52,7 +52,7 @@ def _compute_cvar(returns, confidence=0.95):
 
 
 def _compute_var_historical(returns, confidence=0.95):
-    """VaR 95% (Historical Simulation) สอดคล้องกับ CVaR (F-6)"""
+    """VaR 95% (Historical Simulation) ให้ใช้วิธีเดียวกับ CVaR (แก้ F-6)"""
     r = returns.dropna()
     if len(r) < 20:
         return None
@@ -181,7 +181,10 @@ def calculate_risk_module(df_price_ticker, risk_static_row):
 
     psr = _compute_psr(df['returns'], sr_benchmark=0.0)
     recovery_days = _compute_recovery_days(df)
-
+    
+    var_95 = _compute_var_historical(df['returns'], confidence=0.95)
+    cvar_95 = _compute_cvar(df['returns'], confidence=0.95)
+    
     # รวมคะแนน 5 มิติ
     tail_input = cvar_95 if cvar_95 is not None else (var_95 if pd.notna(var_95) else None)
     tail_dim = float(np.clip(tail_input * 10, 5, 95)) if tail_input is not None else None
