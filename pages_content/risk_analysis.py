@@ -66,7 +66,14 @@ def _is_missing(val):
         return bool(pd.isna(val))
     except (TypeError, ValueError):
         return False
-
+        
+def _compute_var_historical(returns, confidence=0.95):
+    """VaR 95% (Historical Simulation) ให้ใช้วิธีเดียวกับ CVaR (แก้ F-6)"""
+    r = returns.dropna()
+    if len(r) < 20:
+        return None
+    cutoff = np.percentile(r, (1 - confidence) * 100)
+    return round(float(abs(cutoff) * 100), 2)
 
 def _fallback_cvar_95(stock_daily, confidence=0.95):
     """คำนวณ CVaR 95% (Historical Simulation) สดจาก ctx.stock_daily เป็น fallback กรณี cis_summary_scores
