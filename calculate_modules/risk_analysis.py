@@ -140,16 +140,15 @@ def calculate_risk_module(df_price_ticker, risk_static_row):
     drawdown = (df['close'] - cum_max) / cum_max
     max_dd_calc = abs(drawdown.min()) * 100
 
-   if risk_static_row is not None and not risk_static_row.empty:
+if risk_static_row is not None and not risk_static_row.empty:
         beta = clean_float(risk_static_row.iloc[0].get('beta'), default=1.0)
         annual_vol = clean_float(risk_static_row.iloc[0].get('volatility_pct'), default=annual_vol_calc)
-        # ต้องเปลี่ยนบรรทัดนี้ให้เป็น max_dd_calc เท่านั้น (ห้ามมีคำสั่ง clean_float ดึง max_drawdown_pct จากไฟล์)
+        # แก้ F-3: ใช้ค่า Max Drawdown ที่คำนวณจากราคาปิดจริงแทนค่าในไฟล์ที่ค้าง -29.36% ทุกหุ้น
         max_dd = max_dd_calc
-    else:
+else:
         beta = 1.0
         annual_vol = annual_vol_calc
         max_dd = max_dd_calc
-
     # VaR และ CVaR (Historical Simulation ทั้งคู่ เพื่อให้สอดคล้องกัน - F-6)
     var_95 = _compute_var_historical(df['returns'], confidence=0.95)
     cvar_95 = _compute_cvar(df['returns'], confidence=0.95)
