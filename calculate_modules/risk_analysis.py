@@ -181,10 +181,7 @@ def calculate_risk_module(df_price_ticker, risk_static_row):
 
     psr = _compute_psr(df['returns'], sr_benchmark=0.0)
     recovery_days = _compute_recovery_days(df)
-    
-    var_95 = _compute_var_historical(df['returns'], confidence=0.95)
-    cvar_95 = _compute_cvar(df['returns'], confidence=0.95)
-    
+
     # รวมคะแนน 5 มิติ
     tail_input = cvar_95 if cvar_95 is not None else (var_95 if pd.notna(var_95) else None)
     tail_dim = float(np.clip(tail_input * 10, 5, 95)) if tail_input is not None else None
