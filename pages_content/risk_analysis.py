@@ -169,7 +169,12 @@ def render(ctx):
             needle_frac = 0.5
             score_display = """N/A"""
             needle_color = "#475569"
-
+            
+# เดิม: var_95 = 1.645 * daily_vol * 100
+    # แก้เป็น:
+    var_95 = _compute_var_historical(df['returns'], confidence=0.95)
+    cvar_95 = _compute_cvar(df['returns'], confidence=0.95)
+    
         st.markdown(f"""<div style="background-color:#0F172A; border:1px solid #1E293B; border-radius:12px; padding:16px; min-height:260px; display:flex; flex-direction:column; justify-content:space-between; text-align:center;">
     <div style="font-size:14.5px; font-weight:bold; color:#94A3B8; letter-spacing:0.5px; text-align:left;">RISK SUMMARY</div>
     <div style="margin:auto 0;"><svg viewBox="0 0 100 55" style="width:140px; height:90px; display:block; margin:0 auto;">
