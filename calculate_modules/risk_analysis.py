@@ -118,6 +118,7 @@ def calculate_risk_module(df_price_ticker, risk_static_row):
     df = df_price_ticker.sort_values(by='date').reset_index(drop=True)
     df = _clean_price_series(df, 'close')
 
+    # F-7b: ถ้าข้อมูลน้อยเกินไป คืนค่า None ไม่คืน 45 หรือ NaN ปลอม
     if len(df) < 2:
         return {
             'risk_score': None, 'volatility': None, 'volatility_calc': None,
@@ -142,18 +143,18 @@ def calculate_risk_module(df_price_ticker, risk_static_row):
     if risk_static_row is not None and not risk_static_row.empty:
         beta = clean_float(risk_static_row.iloc[0].get('beta'), default=1.0)
         annual_vol = clean_float(risk_static_row.iloc[0].get('volatility_pct'), default=annual_vol_calc)
-        # แก้ F-3: ใช้ค่า Drawdown จริงจากราคา แทนค่า -29.36% ที่ซ้ำกันในไฟล์
+        # แก้ F-3: บังคับใช้ค่า Drawdown จริงจากราคา แทนค่า -29.36% ที่ซ้ำกันในไฟล์
         max_dd = max_dd_calc
     else:
         beta = 1.0
         annual_vol = annual_vol_calc
         max_dd = max_dd_calc
 
-    # VaR และ CVaR
+    # F-6: VaR และ CVaR ใช้ Historical Simulation ร่วมกัน
     var_95 = _compute_var_historical(df['returns'], confidence=0.95)
     cvar_95 = _compute_cvar(df['returns'], confidence=0.95)
 
-    # Sharpe และ Sortino Ratio
+    # Sharpe และ Sortino Ratio หัก Risk-free Rate จริง
     rf_daily = RISK_FREE_RATE_ANNUAL / 252
     excess_returns = df['returns'] - rf_daily
 
@@ -164,7 +165,7 @@ def calculate_risk_module(df_price_ticker, risk_static_row):
     else:
         sharpe = 0.0
 
-    # Downside Deviation (F-8ก)
+    # F-8ก: Downside Deviation ตามสูตรสากล
     downside_diff = np.minimum(0, df['returns'] - rf_daily).dropna()
     if len(downside_diff) > 1:
         downside_deviation = np.sqrt(np.mean(downside_diff ** 2))
@@ -205,6 +206,7 @@ def calculate_risk_module(df_price_ticker, risk_static_row):
         risk_score = round(float(np.clip(100 - risk_index, 25, 92)), 1)
 
     return {
+        # คีย์เดิมตาม Data Contract
         'risk_score': risk_score,
         'volatility': round(float(annual_vol), 1) if pd.notna(annual_vol) else None,
         'volatility_calc': round(float(annual_vol_calc), 1) if pd.notna(annual_vol_calc) else None,
@@ -213,6 +215,7 @@ def calculate_risk_module(df_price_ticker, risk_static_row):
         'beta': round(float(beta), 2),
         'sharpe_ratio': sharpe,
         'sortino_ratio': sortino,
+        # คีย์เสริมแบบสเกลาร์ (แก้ F-1 บันทึก SQLite ผ่าน)
         'cvar_95': cvar_95,
         'psr': psr,
         'recovery_days': recovery_days,
