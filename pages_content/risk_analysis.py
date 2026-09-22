@@ -124,7 +124,16 @@ def render(ctx):
 
     beta_val = safe(ctx.stock_info.get('beta'), 1.0)
     vol_val = safe(ctx.stock_info.get('volatility'), 25.0)
-    dd_val = safe(ctx.stock_info.get('max_drawdown'), 20.0)
+
+    # คำนวณ Max Drawdown จากราคาปิดจริงสดๆ ทันที ไม่ต้องรอคำนวณฐานข้อมูลใหม่
+    if not ctx.stock_daily.empty and 'close' in ctx.stock_daily.columns:
+        _closes = pd.to_numeric(ctx.stock_daily['close'], errors='coerce').dropna()
+        _cum_max = _closes.cummax()
+        _dd_series = (_closes - _cum_max) / _cum_max
+        dd_val = round(abs(float(_dd_series.min())) * 100, 1)
+    else:
+        dd_val = safe(ctx.stock_info.get('max_drawdown'), 20.0)
+
     de_val_r = safe(ctx.stock_info.get('de_ratio'), 1.0)
     cr_val_r = safe(ctx.stock_info.get('current_ratio'), 1.2)
     # F-4: โค้ดไม่ได้คำนวณ Beta เอง และไม่มีข้อมูลดัชนีตลาดให้ตรวจสอบที่มาของค่าในไฟล์ต้นทาง
