@@ -66,14 +66,7 @@ def _is_missing(val):
         return bool(pd.isna(val))
     except (TypeError, ValueError):
         return False
-        
-def _compute_var_historical(returns, confidence=0.95):
-    """VaR 95% (Historical Simulation) ให้ใช้วิธีเดียวกับ CVaR (แก้ F-6)"""
-    r = returns.dropna()
-    if len(r) < 20:
-        return None
-    cutoff = np.percentile(r, (1 - confidence) * 100)
-    return round(float(abs(cutoff) * 100), 2)
+    
 
 def _fallback_cvar_95(stock_daily, confidence=0.95):
     """คำนวณ CVaR 95% (Historical Simulation) สดจาก ctx.stock_daily เป็น fallback กรณี cis_summary_scores
@@ -169,11 +162,7 @@ def render(ctx):
             needle_frac = 0.5
             score_display = """N/A"""
             needle_color = "#475569"
-            
-# เดิม: var_95 = 1.645 * daily_vol * 100
-    # แก้เป็น:
-    var_95 = _compute_var_historical(df['returns'], confidence=0.95)
-    cvar_95 = _compute_cvar(df['returns'], confidence=0.95)
+
     
         st.markdown(f"""<div style="background-color:#0F172A; border:1px solid #1E293B; border-radius:12px; padding:16px; min-height:260px; display:flex; flex-direction:column; justify-content:space-between; text-align:center;">
     <div style="font-size:14.5px; font-weight:bold; color:#94A3B8; letter-spacing:0.5px; text-align:left;">RISK SUMMARY</div>
@@ -303,21 +292,16 @@ def render(ctx):
         var_txt = var_num_txt if var_num_txt == 'N/A' else f'-{var_num_txt}%'
         if cvar_val is not None:
             cvar_txt = _fmt_or_na(cvar_val) + '%'
-            # F-6 (ข้อความ): เดิมเขียนว่า "ขาดทุนสูงสุดที่คาดใน 95% ของวัน" ซึ่งผิดนิยาม (VaR ไม่ใช่
-            # ขาดทุนสูงสุด แต่เป็นระดับที่ "ไม่น่าแย่กว่านี้" ใน 95% ของวัน ยังมี 5% ที่แย่กว่าได้)
-            # แก้คำอธิบายให้ตรงนิยาม ไม่ได้เปลี่ยนวิธีคำนวณ (ยังเป็น Parametric เหมือนเดิม — รอ F-6 ตัดสินใจ)
             downside_metrics_html = f"""<div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; text-align:center; margin:auto 0;">
     <div><div style="font-size:22px; font-weight:bold; color:#EF4444;">{var_txt}</div><div style="font-size:12px; color:#64748B;">VaR 95%</div></div>
     <div><div style="font-size:22px; font-weight:bold; color:#EF4444;">-{cvar_txt}</div><div style="font-size:12px; color:#64748B;">CVaR 95%</div></div>
     </div>
-    <div style="font-size:12px; color:#64748B; border-top:1px solid #1E293B; padding-top:6px;">VaR = ระดับขาดทุนรายวันที่ไม่ควรแย่ไปกว่านี้ใน 95% ของวัน (ไม่ใช่ขาดทุนสูงสุด — ยังมี 5% ของวันที่แย่กว่าได้) คำนวณแบบ Parametric | CVaR = ขาดทุนเฉลี่ยจริงของวันที่แย่กว่าเส้น VaR คำนวณจากข้อมูลจริง (Historical) — ใช้คนละวิธี บางกรณีจึงไม่การันตีว่า CVaR แย่กว่า VaR เสมอ</div>"""
+    <div style="font-size:12px; color:#64748B; border-top:1px solid #1E293B; padding-top:6px;">VaR = ระดับขาดทุนรายวันที่ไม่ควรแย่ไปกว่านี้ใน 95% ของวัน (Historical Simulation) | CVaR = ขาดทุนเฉลี่ยจริงของวันที่แย่กว่าเส้น VaR — คำนวณจากข้อมูลจริงทั้งคู่ จึงการันตีว่า CVaR แย่กว่าหรือเท่ากับ VaR เสมอ</div>"""
         else:
-            # กรณีคำนวณ CVaR ไม่ได้จริงๆ (ข้อมูลราคาน้อยเกินไป) — โชว์แค่ VaR อย่างเดียว
             downside_metrics_html = f"""<div style="margin:auto 0;">
-    <div style="font-size:24px; font-weight:bold; color:#EF4444;">{var_txt}</div><div style="font-size:12.5px; color:#64748B;">VaR 95% (Parametric)</div>
+    <div style="font-size:24px; font-weight:bold; color:#EF4444;">{var_txt}</div><div style="font-size:12.5px; color:#64748B;">VaR 95% (Historical)</div>
     </div>
-    <div style="font-size:12px; color:#64748B; border-top:1px solid #1E293B; padding-top:6px;">VaR = ระดับขาดทุนรายวันที่ไม่ควรแย่ไปกว่านี้ใน 95% ของวัน (ไม่ใช่ขาดทุนสูงสุด) — CVaR ยังคำนวณไม่ได้เนื่องจากข้อมูลราคาย้อนหลังไม่พอ</div>"""
-
+    <div style="font-size:12px; color:#64748B; border-top:1px solid #1E293B; padding-top:6px;">VaR = ระดับขาดทุนรายวันที่ไม่ควรแย่ไปกว่านี้ใน 95% ของวัน — CVaR ยังคำนวณไม่ได้เนื่องจากข้อมูลราคาย้อนหลังไม่พอ</div>"""
         st.markdown(f"""<div style="background-color:#0F172A; border:1px solid #1E293B; border-radius:12px; padding:14px; min-height:225px; display:flex; flex-direction:column; justify-content:space-between;">
     <div style="font-size:14px; font-weight:bold; color:#94A3B8; letter-spacing:0.5px;">DOWNSIDE RISK (Daily)</div>
     {downside_metrics_html}
