@@ -143,7 +143,7 @@ def calculate_risk_module(df_price_ticker, risk_static_row):
    if risk_static_row is not None and not risk_static_row.empty:
         beta = clean_float(risk_static_row.iloc[0].get('beta'), default=1.0)
         annual_vol = clean_float(risk_static_row.iloc[0].get('volatility_pct'), default=annual_vol_calc)
-        # ตรวจสอบบรรทัดนี้: ต้องเป็น max_dd_calc เท่านั้น (ห้ามดึง max_drawdown_pct จากไฟล์)
+        # ต้องเปลี่ยนบรรทัดนี้ให้เป็น max_dd_calc เท่านั้น (ห้ามมีคำสั่ง clean_float ดึง max_drawdown_pct จากไฟล์)
         max_dd = max_dd_calc
     else:
         beta = 1.0
